@@ -12,6 +12,15 @@ Suggested labels:
 - `enhancement`: new or improved behavior.
 - `good-first-agent-task`: small, isolated task suitable for testing the workflow.
 
+## Task folders
+
+Use only these task lifecycle folders:
+
+- `tasks/pending/`: markdown tasks that have not been exported to GitHub issues.
+- `tasks/exported/`: markdown tasks that were successfully exported to GitHub issues.
+
+Do not add local workflow folders for in-progress or done work. GitHub issues and pull requests track execution state after export.
+
 ## Milestones
 
 Suggested milestones:
