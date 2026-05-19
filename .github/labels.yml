@@ -1,0 +1,22 @@
+labels:
+  - name: agent-ready
+    color: 0e8a16
+    description: Refined task ready for an AI coding agent.
+  - name: agent-task
+    color: 5319e7
+    description: Work item generated from a markdown task file.
+  - name: backend
+    color: 1d76db
+    description: Backend or API-related work.
+  - name: documentation
+    color: 0075ca
+    description: Documentation-only or documentation-heavy work.
+  - name: automation
+    color: c2e0c6
+    description: Scripts, workflows, or repeatable automation.
+  - name: bug
+    color: d73a4a
+    description: Something is not working as expected.
+  - name: enhancement
+    color: a2eeef
+    description: New feature or improvement.
