@@ -36,17 +36,7 @@ python scripts/validate_tasks.py
 
 The script validates task metadata and markdown front matter without making network calls.
 
-## 4. Ensure labels
-
-Run:
-
-```bash
-python scripts/ensure_labels.py
-```
-
-This creates missing GitHub labels before issue creation. GitHub rejects issue creation when a requested label does not exist.
-
-## 5. Create GitHub issues
+## 4. Create GitHub issues
 
 Preview first:
 
@@ -62,9 +52,11 @@ python scripts/create_github_issues.py
 
 The script reads `tasks/pending/`, creates one GitHub issue per exportable task, writes the issue URL and number into task front matter, and moves successful exports into `tasks/exported/`.
 
+The script also creates any missing labels before issue creation. GitHub rejects issue creation when a requested label does not exist, so label handling is built into export.
+
 Failed task files remain in `tasks/pending/`.
 
-## 6. Work in GitHub
+## 5. Work in GitHub
 
 Use GitHub issues and pull requests for all future tracking. This repository does not track local in-progress, done, closed, or completed state.
 

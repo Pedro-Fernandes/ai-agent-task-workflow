@@ -32,10 +32,9 @@ When preparing markdown tasks for GitHub:
 
 1. Put unexported task files in `tasks/pending/`.
 2. Run `python scripts/validate_tasks.py`.
-3. Run `python scripts/ensure_labels.py`.
-4. Run `python scripts/create_github_issues.py`.
-5. Leave exported files in `tasks/exported/`.
-6. Track implementation, PRs, and completion in GitHub.
+3. Run `python scripts/create_github_issues.py`.
+4. Leave exported files in `tasks/exported/`.
+5. Track implementation, PRs, and completion in GitHub.
 
 ## Agent workflow
 

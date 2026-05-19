@@ -2,7 +2,7 @@
 
 GitHub rejects issue creation when a task references a label that does not exist in the repository.
 
-For that reason, the workflow ensures labels before issues are created:
+For that reason, `scripts/create_github_issues.py` ensures labels before issues are created:
 
 1. Parse exportable markdown task files from `tasks/pending/`.
 2. Collect every label referenced by those tasks.
@@ -30,22 +30,18 @@ labels:
 
 If a task uses a label that is not listed in `.github/labels.yml`, the scripts still create it automatically using a neutral default color.
 
-## Preview labels
+## Preview labels and issues
 
 ```bash
-python scripts/ensure_labels.py --dry-run
+python scripts/create_github_issues.py --dry-run
 ```
 
-## Ensure labels before creating issues
+The dry run prints the required labels first, then the issues that would be created.
+
+## Use a custom labels file during export
 
 ```bash
-python scripts/ensure_labels.py
-```
-
-## Use a custom labels file
-
-```bash
-python scripts/ensure_labels.py \
+python scripts/create_github_issues.py \
   --labels-file .github/labels.yml
 ```
 

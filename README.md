@@ -35,8 +35,7 @@ Markdown task file -> GitHub issue
 - `tasks/pending/` for task files that have not been exported.
 - `tasks/exported/` for task files that already created GitHub issues.
 - `scripts/validate_tasks.py` to validate pending task metadata.
-- `scripts/ensure_labels.py` to create missing GitHub labels before export.
-- `scripts/create_github_issues.py` to create issues and move successful exports.
+- `scripts/create_github_issues.py` to ensure labels, create issues, and move successful exports.
 
 ## Quick start
 
@@ -59,31 +58,24 @@ export GITHUB_TOKEN="github_pat_your_token_here"
 python scripts/validate_tasks.py
 ```
 
-5. Ensure labels exist:
-
-```bash
-python scripts/ensure_labels.py
-```
-
-6. Preview issue creation:
+5. Preview issue creation:
 
 ```bash
 python scripts/create_github_issues.py --dry-run
 ```
 
-7. Create GitHub issues:
+6. Create GitHub issues:
 
 ```bash
 python scripts/create_github_issues.py
 ```
 
-Successful exports are updated with GitHub issue metadata and moved from `tasks/pending/` to `tasks/exported/`. Failed exports remain in `tasks/pending/`.
+The export script creates any missing labels before creating issues. Successful exports are updated with GitHub issue metadata and moved from `tasks/pending/` to `tasks/exported/`. Failed exports remain in `tasks/pending/`.
 
 If the repository does not have a GitHub `origin` remote, pass `--repo owner/repo` to the label and issue scripts. The core workflow is:
 
 ```bash
 python scripts/validate_tasks.py
-python scripts/ensure_labels.py
 python scripts/create_github_issues.py
 ```
 
@@ -119,7 +111,7 @@ Useful constraints, links, or architectural hints.
 2. AI generates task markdown files.
 3. Tasks are placed into `tasks/pending/`.
 4. Validation script runs.
-5. Labels are ensured.
+5. GitHub labels are ensured by the export script.
 6. GitHub issues are created.
 7. Exported tasks are moved to `tasks/exported/`.
 8. All future work tracking happens in GitHub.
@@ -134,7 +126,7 @@ github_issue_number: 123
 exported_at: "2026-05-19T12:00:00+00:00"
 ```
 
-The export and label scripts skip task files that already contain `github_issue_url` or `github_issue_number`. This prevents accidental duplicate exports if an exported file is copied back into `tasks/pending/`.
+The export script skips task files that already contain `github_issue_url` or `github_issue_number`. This prevents accidental duplicate exports if an exported file is copied back into `tasks/pending/`.
 
 ## License
 
