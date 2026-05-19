@@ -1,19 +1,19 @@
 # Conversation-to-Issue Workflow for AI Agents
 
-A lightweight workflow for turning human and LLM conversations into clear markdown tasks, then exporting those tasks into GitHub issues that drive coding work.
+A lightweight workspace for turning human and LLM conversations into clear markdown tasks, then exporting those tasks into GitHub issues in the project repository where coding work will happen.
 
-This repository exists for the messy middle between "we talked about a change" and "an agent can implement this safely." It gives humans and LLMs a shared place to shape ideas into concrete work: context, scope, non-goals, acceptance criteria, and validation notes. Once a task is ready, the repository exports it to GitHub, where implementation tracking belongs.
+This repository exists for the messy middle between "we talked about a change" and "an agent can implement this safely." It gives humans and LLMs a shared place to shape ideas into concrete work: context, scope, non-goals, acceptance criteria, and validation notes. Once a task is ready, this tool exports it to the target GitHub repository, where implementation tracking belongs.
 
 ## Philosophy
 
 Good AI-assisted development starts before code. Humans and LLMs need room to discuss intent, tradeoffs, constraints, and acceptance criteria before asking a coding agent to modify a repository.
 
-This template treats markdown task files as planning artifacts. They are useful because they are easy to read, easy to revise during conversation, and structured enough to become GitHub issues.
+This template treats markdown task files as planning artifacts. They are useful because they are easy to read, easy to revise during conversation, and structured enough to become GitHub issues in another repository.
 
 The lifecycle is intentionally narrow:
 
 ```text
-conversation -> refined markdown task -> GitHub issue
+conversation -> refined markdown task -> GitHub issue in the target repo
 ```
 
 After export, GitHub becomes the source of truth for execution. This repository does not duplicate:
@@ -32,7 +32,7 @@ After export, GitHub becomes the source of truth for execution. This repository 
 - `docs/` with workflow, task authoring, label, and repository conventions.
 - `.github/ISSUE_TEMPLATE/` for manually created GitHub issues.
 - `scripts/validate_tasks.py` to validate task metadata before export.
-- `scripts/create_github_issues.py` to create missing labels, create issues, add export metadata, and move successful exports.
+- `scripts/create_github_issues.py` to create missing labels, create issues in a required target repo, add export metadata, and move successful exports.
 
 ## Expected Workflow
 
@@ -40,11 +40,12 @@ After export, GitHub becomes the source of truth for execution. This repository 
 2. The LLM drafts one or more markdown task files.
 3. The human and LLM refine those tasks until the scope is clear.
 4. Refined tasks are placed in `tasks/pending/`.
-5. The tasks are validated.
-6. The export script creates any missing GitHub labels.
-7. The export script creates GitHub issues.
-8. Successfully exported task files are moved to `tasks/exported/`.
-9. All future work tracking happens in GitHub issues and pull requests.
+5. The human states the target GitHub repository, or the LLM asks for it before export.
+6. The tasks are validated.
+7. The export script creates any missing GitHub labels in the target repository.
+8. The export script creates GitHub issues in the target repository.
+9. Successfully exported task files are moved to `tasks/exported/`.
+10. All future work tracking happens in the target repository's GitHub issues and pull requests.
 
 ## Quick Start
 
@@ -62,25 +63,31 @@ export GITHUB_TOKEN="github_pat_your_token_here"
 ```
 
 4. Add or refine task files in `tasks/pending/`.
-5. Validate pending tasks:
+5. Identify the target repository for the work:
+
+```text
+owner/repo
+```
+
+6. Validate pending tasks:
 
 ```bash
 python scripts/validate_tasks.py
 ```
 
-6. Preview the export:
+7. Preview the export:
 
 ```bash
-python scripts/create_github_issues.py --dry-run
+python scripts/create_github_issues.py --repo owner/repo --dry-run
 ```
 
-7. Create GitHub issues:
+8. Create GitHub issues:
 
 ```bash
-python scripts/create_github_issues.py
+python scripts/create_github_issues.py --repo owner/repo
 ```
 
-If the repository does not have a GitHub `origin` remote, pass `--repo owner/repo` to the export script.
+`--repo owner/repo` is required. The tool does not infer the target from this repository's Git remote because the tasks are usually exported to a different implementation repository.
 
 ## Task File Format
 
@@ -119,7 +126,7 @@ How to verify the result.
 
 ## Export Behavior
 
-`scripts/create_github_issues.py` reads exportable tasks from `tasks/pending/`. Before creating issues, it collects every label referenced by those tasks and creates any missing labels in GitHub.
+`scripts/create_github_issues.py` reads exportable tasks from `tasks/pending/` and requires `--repo owner/repo` for the target implementation repository. Before creating issues, it collects every label referenced by those tasks and creates any missing labels in that target repository.
 
 For each successful export, the script adds GitHub metadata to the task front matter:
 

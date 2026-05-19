@@ -2,11 +2,11 @@
 
 GitHub rejects issue creation when a task references a label that does not exist in the repository.
 
-For that reason, `scripts/create_github_issues.py` ensures labels before issues are created:
+For that reason, `scripts/create_github_issues.py` ensures labels in the target repository before issues are created:
 
 1. Parse exportable markdown task files from `tasks/pending/`.
 2. Collect every label referenced by those tasks.
-3. Read existing labels from GitHub.
+3. Read existing labels from the target GitHub repository.
 4. Create missing labels.
 5. Create GitHub issues.
 6. Move successful exports into `tasks/exported/`.
@@ -33,7 +33,7 @@ If a task uses a label that is not listed in `.github/labels.yml`, the scripts s
 ## Preview labels and issues
 
 ```bash
-python scripts/create_github_issues.py --dry-run
+python scripts/create_github_issues.py --repo owner/repo --dry-run
 ```
 
 The dry run prints the required labels first, then the issues that would be created.
@@ -42,7 +42,6 @@ The dry run prints the required labels first, then the issues that would be crea
 
 ```bash
 python scripts/create_github_issues.py \
+  --repo owner/repo \
   --labels-file .github/labels.yml
 ```
-
-If the repository does not have a GitHub `origin` remote, pass `--repo owner/repo`.
