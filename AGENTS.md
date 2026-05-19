@@ -4,7 +4,7 @@ This repository is designed to be used by human maintainers and AI coding agents
 
 ## Mission
 
-Help teams convert product ideas into small, reviewable markdown task plans, then export those plans into GitHub issues.
+Help teams convert product ideas into small, reviewable markdown task plans, then export those plans into GitHub issues in the target implementation repository.
 
 ## Source of truth
 
@@ -12,9 +12,11 @@ This repository tracks planning and export state only:
 
 - `tasks/pending/` contains markdown tasks that are candidates for GitHub issue export.
 - `tasks/exported/` contains markdown tasks that already have GitHub issues.
-- GitHub is the source of truth after export.
+- The target GitHub repository is the source of truth after export.
 
 Agents must not invent local completion state. Do not create local folders, labels, metadata, or conventions for implementation progress, in-progress work, done work, PR state, or issue closure. Track that work in GitHub.
+
+At the start of a planning conversation, ask what project is being discussed and what GitHub repository should receive exported issues. It is acceptable to draft and refine tasks before that is known, but never export tasks without an explicit target repository from the user.
 
 ## Operating principles
 
@@ -31,10 +33,11 @@ Agents must not invent local completion state. Do not create local folders, labe
 When preparing markdown tasks for GitHub:
 
 1. Put unexported task files in `tasks/pending/`.
-2. Run `python scripts/validate_tasks.py`.
-3. Run `python scripts/create_github_issues.py`.
-4. Leave exported files in `tasks/exported/`.
-5. Track implementation, PRs, and completion in GitHub.
+2. Confirm the target repository in `owner/repo` format.
+3. Run `python scripts/validate_tasks.py`.
+4. Run `python scripts/create_github_issues.py --repo owner/repo`.
+5. Leave exported files in `tasks/exported/`.
+6. Track implementation, PRs, and completion in the target GitHub repository.
 
 ## Agent workflow
 

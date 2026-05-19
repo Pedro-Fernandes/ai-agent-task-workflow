@@ -7,7 +7,6 @@ import argparse
 import os
 import re
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -72,32 +71,6 @@ def require_requests():
     if requests is None:
         raise RuntimeError("The 'requests' package is required. Install dependencies with: python -m pip install -r requirements.txt")
     return requests
-
-
-def infer_repo_from_git_remote() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return None
-
-    remote_url = result.stdout.strip()
-    if result.returncode != 0 or not remote_url:
-        return None
-
-    patterns = (
-        r"github\.com[:/](?P<repo>[^/]+/[^/]+?)(?:\.git)?$",
-        r"github\.com/(?P<repo>[^/]+/[^/]+?)(?:\.git)?$",
-    )
-    for pattern in patterns:
-        match = re.search(pattern, remote_url)
-        if match:
-            return match.group("repo")
-    return None
 
 
 def parse_front_matter(content: str, path: Path) -> tuple[dict[str, Any], str]:
@@ -320,7 +293,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Create GitHub issues from pending markdown task files.")
     parser.add_argument(
         "--repo",
-        help="GitHub repository in owner/name format. Defaults to the GitHub origin remote.",
+        required=True,
+        help="Target GitHub repository in owner/name format.",
     )
     parser.add_argument(
         "--tasks",
@@ -372,18 +346,13 @@ def main() -> int:
             print(f"          labels={task.labels} assignees={task.assignees} milestone={task.milestone}")
         return 0
 
-    repo = args.repo or infer_repo_from_git_remote()
-    if not repo:
-        print("Error: --repo is required when a GitHub origin remote cannot be inferred.", file=sys.stderr)
-        return 1
-
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         print("Error: GITHUB_TOKEN environment variable is required.", file=sys.stderr)
         return 1
 
     try:
-        ensure_labels_exist(repo, token, required_labels, label_definitions)
+        ensure_labels_exist(args.repo, token, required_labels, label_definitions)
     except RequestHTTPError as exc:
         response_text = exc.response.text if exc.response is not None else str(exc)
         print(f"Error ensuring labels before issue creation: {response_text}", file=sys.stderr)
@@ -391,7 +360,7 @@ def main() -> int:
 
     for task in tasks:
         try:
-            issue = create_issue(repo, token, task)
+            issue = create_issue(args.repo, token, task)
             write_export_metadata(task, issue)
             destination = move_to_exported(task, Path(args.exported))
             print(f"Created: {issue.url}")
