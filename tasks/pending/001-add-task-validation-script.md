@@ -27,18 +27,18 @@ Provide a simple validation command that checks whether task markdown files foll
 
 ## Acceptance Criteria
 
-- [ ] Running `python scripts/validate_tasks.py tasks/ready` validates all ready tasks.
+- [ ] Running `python scripts/validate_tasks.py` validates all pending tasks.
 - [ ] Invalid task files fail with a useful error message.
 - [ ] The command exits with a non-zero status when validation fails.
 
 ## Implementation Notes
 
-Reuse parsing logic from `scripts/create_issues.py` where possible.
+Reuse parsing logic from `scripts/create_github_issues.py` where possible.
 
 ## Validation
 
 Run:
 
 ```bash
-python scripts/validate_tasks.py tasks/ready
+python scripts/validate_tasks.py
 ```

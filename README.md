@@ -1,17 +1,41 @@
 # AI Agent Task Workflow Template
 
-A generic GitHub template repository for running AI-assisted development through structured markdown tasks, agent instructions, and repeatable GitHub issue creation.
+A generic GitHub template repository for turning structured markdown task plans into GitHub issues.
 
-The goal is simple: define work in markdown, keep tasks reviewable, and let scripts convert curated task files into GitHub issues with consistent labels, milestones, and acceptance criteria.
+## Philosophy
+
+This repository is an AI-agent task planning and export system.
+
+Task markdown files are planning artifacts used to:
+
+- discuss changes with LLMs
+- refine scope
+- define acceptance criteria
+- generate GitHub issues
+
+After export, GitHub becomes the source of truth.
+
+The repository intentionally does not duplicate:
+
+- issue status
+- implementation progress
+- completion tracking
+
+The repository manages one transition:
+
+```text
+Markdown task file -> GitHub issue
+```
 
 ## What this template gives you
 
 - `AGENTS.md` with operating instructions for AI coding agents.
-- `docs/` with workflow, task authoring, and repository conventions.
+- `docs/` with workflow, task authoring, label, and repository conventions.
 - `.github/ISSUE_TEMPLATE/` for manually created GitHub issues.
-- `tasks/` folders for backlog, ready, and done task files.
-- `scripts/create_issues.py` to create GitHub issues from markdown task files, ensuring labels exist first.
-- Example tasks, default `.github/labels.yml`, and configuration to copy into your own project.
+- `tasks/pending/` for task files that have not been exported.
+- `tasks/exported/` for task files that already created GitHub issues.
+- `scripts/validate_tasks.py` to validate pending task metadata.
+- `scripts/create_github_issues.py` to ensure labels, create issues, and move successful exports.
 
 ## Quick start
 
@@ -22,22 +46,37 @@ The goal is simple: define work in markdown, keep tasks reviewable, and let scri
 python -m pip install -r requirements.txt
 ```
 
-3. Export a GitHub token with issue creation permissions:
+3. Export a GitHub token with issue and label permissions:
 
 ```bash
-export GITHUB_TOKEN="ghp_your_token_here"
+export GITHUB_TOKEN="github_pat_your_token_here"
 ```
 
-4. Preview issue creation:
+4. Validate pending task files:
 
 ```bash
-python scripts/create_issues.py --repo owner/repo --tasks tasks/ready --dry-run
+python scripts/validate_tasks.py
 ```
 
-5. Create the issues. The script creates any missing labels before creating issues:
+5. Preview issue creation:
 
 ```bash
-python scripts/create_issues.py --repo owner/repo --tasks tasks/ready
+python scripts/create_github_issues.py --dry-run
+```
+
+6. Create GitHub issues:
+
+```bash
+python scripts/create_github_issues.py
+```
+
+The export script creates any missing labels before creating issues. Successful exports are updated with GitHub issue metadata and moved from `tasks/pending/` to `tasks/exported/`. Failed exports remain in `tasks/pending/`.
+
+If the repository does not have a GitHub `origin` remote, pass `--repo owner/repo` to the label and issue scripts. The core workflow is:
+
+```bash
+python scripts/validate_tasks.py
+python scripts/create_github_issues.py
 ```
 
 ## Task file format
@@ -66,13 +105,28 @@ What needs to be achieved.
 Useful constraints, links, or architectural hints.
 ```
 
-## Recommended workflow
+## Expected Workflow
 
-1. Capture rough ideas in `tasks/backlog/`.
-2. Refine task files until they are small, testable, and agent-ready.
-3. Move refined files into `tasks/ready/`.
-4. Run the issue creation script.
-5. Work from GitHub issues and keep task files as source-of-truth planning artifacts.
+1. Human and AI discuss a feature.
+2. AI generates task markdown files.
+3. Tasks are placed into `tasks/pending/`.
+4. Validation script runs.
+5. GitHub labels are ensured by the export script.
+6. GitHub issues are created.
+7. Exported tasks are moved to `tasks/exported/`.
+8. All future work tracking happens in GitHub.
+
+## Idempotency
+
+Successful exports add these fields to task front matter before the file is moved:
+
+```yaml
+github_issue_url: "https://github.com/owner/repo/issues/123"
+github_issue_number: 123
+exported_at: "2026-05-19T12:00:00+00:00"
+```
+
+The export script skips task files that already contain `github_issue_url` or `github_issue_number`. This prevents accidental duplicate exports if an exported file is copied back into `tasks/pending/`.
 
 ## License
 

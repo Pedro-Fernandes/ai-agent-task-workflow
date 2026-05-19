@@ -1,6 +1,6 @@
 # Task Authoring Guide
 
-Good AI-agent tasks are specific, bounded, and verifiable.
+Good AI-agent tasks are specific, bounded, and verifiable. They are planning artifacts used to create GitHub issues, not local execution state.
 
 ## Recommended structure
 
@@ -39,11 +39,17 @@ Explain how to verify the result.
 
 A task is probably too large if it requires more than one conceptual change. Split it into smaller tasks when possible.
 
+## Placement
+
+Put unexported task files in `tasks/pending/`. After a successful export, the issue creation script moves them to `tasks/exported/` and adds GitHub issue metadata to the front matter.
+
+Do not add local in-progress or done markers. Track implementation state in GitHub.
+
 ## Good acceptance criteria
 
 Good criteria are observable:
 
-- The script supports `--dry-run` without making network calls.
+- The export script supports `--dry-run` without creating issues.
 - Invalid markdown front matter exits with a clear error message.
 - The README includes a copy-paste quick start.
 

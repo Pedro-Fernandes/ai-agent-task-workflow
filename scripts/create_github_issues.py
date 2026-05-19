@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
-"""Create GitHub issues from markdown task files.
-
-Each markdown task file must contain YAML front matter with at least:
-
----
-title: "Issue title"
-labels: ["agent-ready"]
----
-
-The remaining markdown body becomes the GitHub issue body.
-
-Important: this script creates any missing labels before creating issues.
-GitHub rejects issue creation when a requested label does not exist.
-"""
+"""Create GitHub issues from pending markdown task files."""
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import requests
 import yaml
 
+try:
+    import requests
+except ModuleNotFoundError:
+    requests = None  # type: ignore[assignment]
+    RequestHTTPError = RuntimeError
+else:
+    RequestHTTPError = requests.HTTPError
 
+
+DEFAULT_TASKS_PATH = Path("tasks/pending")
+DEFAULT_EXPORTED_PATH = Path("tasks/exported")
 DEFAULT_LABEL_COLOR = "ededed"
 DEFAULT_LABEL_DESCRIPTION = "Created automatically by the AI agent task workflow."
 
@@ -39,6 +39,14 @@ class TaskIssue:
     labels: list[str]
     assignees: list[str]
     milestone: str | None
+    metadata: dict[str, Any]
+    raw_body: str
+
+
+@dataclass(frozen=True)
+class CreatedIssue:
+    url: str
+    number: int
 
 
 @dataclass(frozen=True)
@@ -60,20 +68,48 @@ def github_headers(token: str) -> dict[str, str]:
     }
 
 
-def parse_front_matter(content: str, path: Path) -> tuple[dict[str, Any], str]:
-    if not content.startswith("---\n"):
-        raise TaskParseError(f"{path}: missing YAML front matter starting with ---")
+def require_requests():
+    if requests is None:
+        raise RuntimeError("The 'requests' package is required. Install dependencies with: python -m pip install -r requirements.txt")
+    return requests
 
+
+def infer_repo_from_git_remote() -> str | None:
     try:
-        _, raw_front_matter, body = content.split("---", 2)
-    except ValueError as exc:
-        raise TaskParseError(f"{path}: invalid YAML front matter block") from exc
+        result = subprocess.run(
+            ["git", "config", "--get", "remote.origin.url"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
 
-    metadata = yaml.safe_load(raw_front_matter) or {}
+    remote_url = result.stdout.strip()
+    if result.returncode != 0 or not remote_url:
+        return None
+
+    patterns = (
+        r"github\.com[:/](?P<repo>[^/]+/[^/]+?)(?:\.git)?$",
+        r"github\.com/(?P<repo>[^/]+/[^/]+?)(?:\.git)?$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, remote_url)
+        if match:
+            return match.group("repo")
+    return None
+
+
+def parse_front_matter(content: str, path: Path) -> tuple[dict[str, Any], str]:
+    match = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n?(.*)\Z", content, re.DOTALL)
+    if not match:
+        raise TaskParseError(f"{path}: missing or invalid YAML front matter block")
+
+    metadata = yaml.safe_load(match.group(1)) or {}
     if not isinstance(metadata, dict):
         raise TaskParseError(f"{path}: front matter must be a YAML mapping")
 
-    return metadata, body.strip()
+    return metadata, match.group(2).strip()
 
 
 def normalize_string_list(value: Any, field_name: str, path: Path) -> list[str]:
@@ -82,6 +118,10 @@ def normalize_string_list(value: Any, field_name: str, path: Path) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise TaskParseError(f"{path}: '{field_name}' must be a list of strings")
     return [item.strip() for item in value if item.strip()]
+
+
+def has_export_metadata(metadata: dict[str, Any]) -> bool:
+    return bool(metadata.get("github_issue_url") or metadata.get("github_issue_number"))
 
 
 def load_task(path: Path) -> TaskIssue:
@@ -107,6 +147,8 @@ def load_task(path: Path) -> TaskIssue:
         labels=labels,
         assignees=assignees,
         milestone=milestone,
+        metadata=metadata,
+        raw_body=body,
     )
 
 
@@ -115,25 +157,23 @@ def discover_task_files(tasks_path: Path) -> list[Path]:
         return [tasks_path]
     if not tasks_path.exists():
         raise FileNotFoundError(f"Task path does not exist: {tasks_path}")
-    return sorted(tasks_path.glob("*.md"))
+    return sorted(path for path in tasks_path.glob("*.md") if path.name != "TASK_TEMPLATE.md")
+
+
+def load_exportable_tasks(tasks_path: Path) -> tuple[list[TaskIssue], list[Path]]:
+    tasks: list[TaskIssue] = []
+    skipped: list[Path] = []
+    for path in discover_task_files(tasks_path):
+        task = load_task(path)
+        if has_export_metadata(task.metadata):
+            skipped.append(path)
+            continue
+        tasks.append(task)
+    return tasks, skipped
 
 
 def load_label_definitions(path: Path | None) -> dict[str, LabelDefinition]:
-    """Load optional label metadata from YAML.
-
-    Supported formats:
-
-    labels:
-      - name: agent-ready
-        color: 0e8a16
-        description: Ready for an AI agent
-
-    Or:
-
-    agent-ready:
-      color: 0e8a16
-      description: Ready for an AI agent
-    """
+    """Load optional label metadata from YAML."""
     if path is None or not path.exists():
         return {}
 
@@ -165,10 +205,11 @@ def load_label_definitions(path: Path | None) -> dict[str, LabelDefinition]:
 
 
 def list_existing_labels(repo: str, token: str) -> set[str]:
+    requests_module = require_requests()
     labels: set[str] = set()
     page = 1
     while True:
-        response = requests.get(
+        response = requests_module.get(
             f"https://api.github.com/repos/{repo}/labels",
             headers=github_headers(token),
             params={"per_page": 100, "page": page},
@@ -184,7 +225,8 @@ def list_existing_labels(repo: str, token: str) -> set[str]:
 
 
 def create_label(repo: str, token: str, definition: LabelDefinition) -> None:
-    response = requests.post(
+    requests_module = require_requests()
+    response = requests_module.post(
         f"https://api.github.com/repos/{repo}/labels",
         headers=github_headers(token),
         json={
@@ -211,17 +253,15 @@ def ensure_labels_exist(
     missing_labels = sorted(required_labels - existing_labels)
 
     for label_name in missing_labels:
-        definition = label_definitions.get(
-            label_name,
-            LabelDefinition(name=label_name),
-        )
+        definition = label_definitions.get(label_name, LabelDefinition(name=label_name))
         create_label(repo, token, definition)
         print(f"Created missing label: {label_name}")
 
 
 def get_milestone_number(repo: str, token: str, milestone_title: str) -> int | None:
+    requests_module = require_requests()
     url = f"https://api.github.com/repos/{repo}/milestones"
-    response = requests.get(url, headers=github_headers(token), params={"state": "all"}, timeout=30)
+    response = requests_module.get(url, headers=github_headers(token), params={"state": "all"}, timeout=30)
     response.raise_for_status()
     for milestone in response.json():
         if milestone.get("title") == milestone_title:
@@ -229,7 +269,8 @@ def get_milestone_number(repo: str, token: str, milestone_title: str) -> int | N
     return None
 
 
-def create_issue(repo: str, token: str, task: TaskIssue) -> str:
+def create_issue(repo: str, token: str, task: TaskIssue) -> CreatedIssue:
+    requests_module = require_requests()
     payload: dict[str, Any] = {
         "title": task.title,
         "body": task.body,
@@ -246,20 +287,51 @@ def create_issue(repo: str, token: str, task: TaskIssue) -> str:
             )
         payload["milestone"] = milestone_number
 
-    response = requests.post(
+    response = requests_module.post(
         f"https://api.github.com/repos/{repo}/issues",
         headers=github_headers(token),
         json=payload,
         timeout=30,
     )
     response.raise_for_status()
-    return response.json()["html_url"]
+    data = response.json()
+    return CreatedIssue(url=data["html_url"], number=int(data["number"]))
+
+
+def write_export_metadata(task: TaskIssue, issue: CreatedIssue) -> None:
+    metadata = dict(task.metadata)
+    metadata["github_issue_url"] = issue.url
+    metadata["github_issue_number"] = issue.number
+    metadata["exported_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    front_matter = yaml.safe_dump(metadata, sort_keys=False, allow_unicode=False).strip()
+    task.source_file.write_text(f"---\n{front_matter}\n---\n\n{task.raw_body}\n", encoding="utf-8")
+
+
+def move_to_exported(task: TaskIssue, exported_path: Path) -> Path:
+    exported_path.mkdir(parents=True, exist_ok=True)
+    destination = exported_path / task.source_file.name
+    if destination.exists():
+        raise FileExistsError(f"Export destination already exists: {destination}")
+    shutil.move(str(task.source_file), str(destination))
+    return destination
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Create GitHub issues from markdown task files.")
-    parser.add_argument("--repo", required=True, help="GitHub repository in owner/name format.")
-    parser.add_argument("--tasks", required=True, help="Task markdown file or directory containing .md files.")
+    parser = argparse.ArgumentParser(description="Create GitHub issues from pending markdown task files.")
+    parser.add_argument(
+        "--repo",
+        help="GitHub repository in owner/name format. Defaults to the GitHub origin remote.",
+    )
+    parser.add_argument(
+        "--tasks",
+        default=str(DEFAULT_TASKS_PATH),
+        help="Task markdown file or directory containing .md files. Defaults to tasks/pending.",
+    )
+    parser.add_argument(
+        "--exported",
+        default=str(DEFAULT_EXPORTED_PATH),
+        help="Directory for successfully exported task files. Defaults to tasks/exported.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print issues and required labels without creating them.")
     parser.add_argument(
         "--labels-file",
@@ -274,15 +346,17 @@ def main() -> int:
     tasks_path = Path(args.tasks)
 
     try:
-        task_files = discover_task_files(tasks_path)
-        tasks = [load_task(path) for path in task_files]
+        tasks, skipped = load_exportable_tasks(tasks_path)
         label_definitions = load_label_definitions(Path(args.labels_file) if args.labels_file else None)
     except (OSError, TaskParseError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
+    for path in skipped:
+        print(f"Skipped already exported task: {path}")
+
     if not tasks:
-        print(f"No markdown task files found in {tasks_path}")
+        print(f"No exportable markdown task files found in {tasks_path}")
         return 0
 
     required_labels = {label for task in tasks for label in task.labels}
@@ -298,27 +372,35 @@ def main() -> int:
             print(f"          labels={task.labels} assignees={task.assignees} milestone={task.milestone}")
         return 0
 
+    repo = args.repo or infer_repo_from_git_remote()
+    if not repo:
+        print("Error: --repo is required when a GitHub origin remote cannot be inferred.", file=sys.stderr)
+        return 1
+
     token = os.getenv("GITHUB_TOKEN")
     if not token:
         print("Error: GITHUB_TOKEN environment variable is required.", file=sys.stderr)
         return 1
 
     try:
-        ensure_labels_exist(args.repo, token, required_labels, label_definitions)
-    except requests.HTTPError as exc:
+        ensure_labels_exist(repo, token, required_labels, label_definitions)
+    except RequestHTTPError as exc:
         response_text = exc.response.text if exc.response is not None else str(exc)
         print(f"Error ensuring labels before issue creation: {response_text}", file=sys.stderr)
         return 1
 
     for task in tasks:
         try:
-            issue_url = create_issue(args.repo, token, task)
-            print(f"Created: {issue_url}")
-        except requests.HTTPError as exc:
+            issue = create_issue(repo, token, task)
+            write_export_metadata(task, issue)
+            destination = move_to_exported(task, Path(args.exported))
+            print(f"Created: {issue.url}")
+            print(f"Moved: {task.source_file} -> {destination}")
+        except RequestHTTPError as exc:
             response_text = exc.response.text if exc.response is not None else str(exc)
             print(f"Error creating issue for {task.source_file}: {response_text}", file=sys.stderr)
             return 1
-        except RuntimeError as exc:
+        except (OSError, RuntimeError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1
 
